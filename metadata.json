@@ -1,0 +1,6 @@
+{
+  "name": "Smart Study AI",
+  "description": "AI-powered study assistant that transforms study notes into clear summaries, interactive quizzes, and flashcards using Google Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
