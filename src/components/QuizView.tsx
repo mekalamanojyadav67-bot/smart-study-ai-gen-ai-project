@@ -44,9 +44,23 @@ export default function QuizView({
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [submittedAttempt, setSubmittedAttempt] = useState<QuizAttempt | null>(null);
 
+  const quizQuestions = Array.isArray(currentQuiz?.questions) ? currentQuiz.questions : [];
+  const safeIndex =
+    quizQuestions.length > 0
+      ? Math.min(Math.max(0, currentIndex), quizQuestions.length - 1)
+      : 0;
+
+  // Keep selectedAnswers length synced if currentQuiz changes
+  useEffect(() => {
+    if (quizQuestions.length > 0 && selectedAnswers.length !== quizQuestions.length) {
+      setSelectedAnswers(new Array(quizQuestions.length).fill(-1));
+      setCurrentIndex(0);
+    }
+  }, [currentQuiz?.id, quizQuestions.length]);
+
   // If user clicked "Review Answers" from Dashboard, show that attempt directly
   useEffect(() => {
-    if (reviewAttempt) {
+    if (reviewAttempt && Array.isArray(reviewAttempt.questions)) {
       setSubmittedAttempt(reviewAttempt);
       setError(null);
     }
@@ -61,6 +75,10 @@ export default function QuizView({
 
     try {
       const data = await generateQuiz(activeNote.content, selectedCount, activeNote.title);
+      if (!Array.isArray(data.questions) || data.questions.length === 0) {
+        throw new Error('No quiz questions were returned. Please try again.');
+      }
+
       const quiz: GeneratedQuiz = {
         id: `quiz-${Date.now()}`,
         noteId: activeNote.id,
@@ -82,24 +100,27 @@ export default function QuizView({
   };
 
   const handleSelectOption = (optionIndex: number) => {
-    if (!currentQuiz || submittedAttempt) return;
+    if (quizQuestions.length === 0 || submittedAttempt) return;
     setSelectedAnswers((prev) => {
-      const next = [...prev];
-      next[currentIndex] = optionIndex;
+      const next =
+        prev.length === quizQuestions.length
+          ? [...prev]
+          : new Array(quizQuestions.length).fill(-1);
+      next[safeIndex] = optionIndex;
       return next;
     });
   };
 
   const handleSubmitQuiz = () => {
-    if (!currentQuiz) return;
+    if (!currentQuiz || quizQuestions.length === 0) return;
     let correctCount = 0;
-    currentQuiz.questions.forEach((q, idx) => {
+    quizQuestions.forEach((q, idx) => {
       if (selectedAnswers[idx] === q.correctIndex) {
         correctCount += 1;
       }
     });
 
-    const total = currentQuiz.questions.length;
+    const total = quizQuestions.length;
     const scorePercent = Math.round((correctCount / total) * 100);
 
     const attempt: QuizAttempt = {
@@ -110,8 +131,11 @@ export default function QuizView({
       correctAnswers: correctCount,
       scorePercent,
       completedAt: new Date().toISOString(),
-      answers: [...selectedAnswers],
-      questions: currentQuiz.questions,
+      answers:
+        selectedAnswers.length === total
+          ? [...selectedAnswers]
+          : new Array(total).fill(-1),
+      questions: quizQuestions,
     };
 
     setSubmittedAttempt(attempt);
@@ -119,8 +143,8 @@ export default function QuizView({
   };
 
   const handleRetake = () => {
-    if (!currentQuiz) {
-      if (reviewAttempt) {
+    if (quizQuestions.length === 0) {
+      if (reviewAttempt && Array.isArray(reviewAttempt.questions) && reviewAttempt.questions.length > 0) {
         onSetCurrentQuiz({
           id: `quiz-${Date.now()}`,
           noteId: reviewAttempt.noteId,
@@ -138,13 +162,13 @@ export default function QuizView({
       }
       return;
     }
-    setSelectedAnswers(new Array(currentQuiz.questions.length).fill(-1));
+    setSelectedAnswers(new Array(quizQuestions.length).fill(-1));
     setCurrentIndex(0);
     setSubmittedAttempt(null);
     onClearReviewAttempt();
   };
 
-  if (!activeNote && !submittedAttempt && !currentQuiz) {
+  if (!activeNote && !submittedAttempt && quizQuestions.length === 0) {
     return (
       <div className="rounded-2xl bg-white border border-slate-200/90 p-10 text-center max-w-xl mx-auto mt-6">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
@@ -214,7 +238,14 @@ export default function QuizView({
 
   // Results & Explanations View
   if (!isGenerating && submittedAttempt) {
+    const attemptQuestions = Array.isArray(submittedAttempt.questions)
+      ? submittedAttempt.questions
+      : [];
+    const attemptAnswers = Array.isArray(submittedAttempt.answers)
+      ? submittedAttempt.answers
+      : [];
     const passed = submittedAttempt.scorePercent >= 70;
+
     return (
       <div className="space-y-6">
         {generatorBar}
@@ -289,14 +320,15 @@ export default function QuizView({
           <h3 className="text-base font-semibold text-slate-900">
             Answer Breakdown & Explanations
           </h3>
-          {submittedAttempt.questions.map((q, qIdx) => {
-            const userAnswer = submittedAttempt.answers[qIdx] ?? -1;
+          {attemptQuestions.map((q, qIdx) => {
+            const userAnswer = attemptAnswers[qIdx] ?? -1;
             const isCorrect = userAnswer === q.correctIndex;
             const isSkipped = userAnswer === -1;
+            const optionsList = Array.isArray(q.options) ? q.options : [];
 
             return (
               <div
-                key={q.id}
+                key={q.id ?? qIdx}
                 className="rounded-2xl bg-white border border-slate-200/90 p-6 space-y-4"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
@@ -325,7 +357,7 @@ export default function QuizView({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {q.options.map((opt, optIdx) => {
+                  {optionsList.map((opt, optIdx) => {
                     const isRightOption = optIdx === q.correctIndex;
                     const isUserChoice = optIdx === userAnswer;
 
@@ -346,7 +378,7 @@ export default function QuizView({
                       >
                         <div className="flex items-start gap-2.5">
                           <span className="font-mono text-xs font-semibold mt-0.5">
-                            {OPTION_LETTERS[optIdx]}.
+                            {OPTION_LETTERS[optIdx] ?? optIdx + 1}.
                           </span>
                           <span>{opt}</span>
                         </div>
@@ -373,7 +405,8 @@ export default function QuizView({
   }
 
   const activeQuestion =
-    !isGenerating && currentQuiz ? currentQuiz.questions[currentIndex] : null;
+    !isGenerating && quizQuestions.length > 0 ? quizQuestions[safeIndex] ?? null : null;
+  const activeOptions = Array.isArray(activeQuestion?.options) ? activeQuestion.options : [];
   const answeredCount = selectedAnswers.filter((a) => a !== -1).length;
 
   return (
@@ -422,7 +455,7 @@ export default function QuizView({
       )}
 
       {/* Prompt before generating first quiz */}
-      {!isGenerating && !currentQuiz && activeNote && (
+      {!isGenerating && !activeQuestion && activeNote && (
         <div className="rounded-2xl bg-gradient-to-br from-sky-50/80 to-white border border-sky-200/80 p-8 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
             <HelpCircle className="h-6 w-6" />
@@ -444,16 +477,16 @@ export default function QuizView({
       )}
 
       {/* Interactive One-Question-at-a-Time Quiz */}
-      {!isGenerating && currentQuiz && activeQuestion && (
+      {!isGenerating && activeQuestion && (
         <div className="rounded-2xl bg-white border border-slate-200/90 p-6 sm:p-8 space-y-6">
           {/* Progress Header */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-500">
               <span className="font-mono text-sky-700 font-semibold tabular-nums">
-                Question {currentIndex + 1} of {currentQuiz.questions.length}
+                Question {safeIndex + 1} of {quizQuestions.length}
               </span>
               <span className="tabular-nums">
-                {answeredCount} of {currentQuiz.questions.length} answered
+                {answeredCount} of {quizQuestions.length} answered
               </span>
             </div>
 
@@ -461,19 +494,19 @@ export default function QuizView({
               <div
                 className="h-full rounded-full bg-sky-600 transition-all duration-200"
                 style={{
-                  width: `${((currentIndex + 1) / currentQuiz.questions.length) * 100}%`,
+                  width: `${((safeIndex + 1) / quizQuestions.length) * 100}%`,
                 }}
               />
             </div>
 
             {/* Question Stepper Buttons */}
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {currentQuiz.questions.map((q, idx) => {
-                const isCurrent = idx === currentIndex;
-                const isAnswered = selectedAnswers[idx] !== -1;
+              {quizQuestions.map((q, idx) => {
+                const isCurrent = idx === safeIndex;
+                const isAnswered = (selectedAnswers[idx] ?? -1) !== -1;
                 return (
                   <button
-                    key={q.id}
+                    key={q.id ?? idx}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
                     aria-label={`Go to question ${idx + 1}`}
@@ -501,8 +534,8 @@ export default function QuizView({
 
           {/* Four Answer Options */}
           <div className="space-y-3" role="radiogroup" aria-label="Answer choices">
-            {activeQuestion.options.map((option, optIdx) => {
-              const isSelected = selectedAnswers[currentIndex] === optIdx;
+            {activeOptions.map((option, optIdx) => {
+              const isSelected = selectedAnswers[safeIndex] === optIdx;
               return (
                 <button
                   key={optIdx}
@@ -523,7 +556,7 @@ export default function QuizView({
                         : 'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    {OPTION_LETTERS[optIdx]}
+                    {OPTION_LETTERS[optIdx] ?? optIdx + 1}
                   </span>
                   <span className="text-sm sm:text-base leading-relaxed">{option}</span>
                 </button>
@@ -535,7 +568,7 @@ export default function QuizView({
           <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              disabled={currentIndex === 0}
+              disabled={safeIndex === 0}
               onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
               className="inline-flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors whitespace-nowrap"
             >
@@ -544,12 +577,12 @@ export default function QuizView({
             </button>
 
             <div className="flex items-center gap-2.5">
-              {currentIndex < currentQuiz.questions.length - 1 ? (
+              {safeIndex < quizQuestions.length - 1 ? (
                 <button
                   type="button"
                   onClick={() =>
                     setCurrentIndex((i) =>
-                      Math.min(currentQuiz.questions.length - 1, i + 1)
+                      Math.min(quizQuestions.length - 1, i + 1)
                     )
                   }
                   className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 transition-colors whitespace-nowrap"
@@ -565,12 +598,12 @@ export default function QuizView({
                   className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   <span>
-                    Submit Quiz ({answeredCount}/{currentQuiz.questions.length})
+                    Submit Quiz ({answeredCount}/{quizQuestions.length})
                   </span>
                 </button>
               )}
 
-              {currentIndex < currentQuiz.questions.length - 1 && answeredCount === currentQuiz.questions.length && (
+              {safeIndex < quizQuestions.length - 1 && answeredCount === quizQuestions.length && (
                 <button
                   type="button"
                   onClick={handleSubmitQuiz}

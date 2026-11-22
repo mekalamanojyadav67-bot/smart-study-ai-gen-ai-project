@@ -248,7 +248,7 @@ export default function SummarizerView({
                 Important Points & Key Takeaways
               </h3>
               <ol className="mt-4 space-y-3">
-                {summary.importantPoints.map((point, idx) => (
+                {(Array.isArray(summary.importantPoints) ? summary.importantPoints : []).map((point, idx) => (
                   <li key={idx} className="flex items-start gap-3 text-sm text-slate-700 leading-relaxed">
                     <span className="font-mono text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-md h-6 w-6 shrink-0 flex items-center justify-center tabular-nums mt-0.5">
                       {idx + 1}
@@ -263,7 +263,7 @@ export default function SummarizerView({
             <section className="lg:col-span-6 rounded-2xl bg-white border border-slate-200/90 p-6">
               <h3 className="text-base font-semibold text-slate-900">Core Vocabulary & Terms</h3>
               <dl className="mt-4 divide-y divide-slate-100">
-                {summary.keyTerms.map((item, idx) => (
+                {(Array.isArray(summary.keyTerms) ? summary.keyTerms : []).map((item, idx) => (
                   <div key={idx} className="py-3 first:pt-0 last:pb-0">
                     <dt className="text-sm font-semibold text-slate-900">{item.term}</dt>
                     <dd className="mt-1 text-sm text-slate-600 leading-relaxed">
@@ -284,7 +284,7 @@ export default function SummarizerView({
               </h3>
             </div>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {summary.difficultTopics.map((item, idx) => (
+              {(Array.isArray(summary.difficultTopics) ? summary.difficultTopics : []).map((item, idx) => (
                 <div
                   key={idx}
                   className="rounded-xl bg-white border border-sky-100 p-5 space-y-2.5"

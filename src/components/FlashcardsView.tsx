@@ -39,7 +39,7 @@ export default function FlashcardsView({
   const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
-    if (deck) {
+    if (deck && Array.isArray(deck.cards)) {
       setCardOrder(deck.cards);
       setCurrentIndex(0);
       setIsFlipped(false);
@@ -82,7 +82,7 @@ export default function FlashcardsView({
       const nextDeck: FlashcardDeck = {
         noteId: activeNote.id,
         topic: data.topic || activeNote.title,
-        cards: data.cards,
+        cards: Array.isArray(data.cards) ? data.cards : [],
         masteredIds: [],
         generatedAt: new Date().toISOString(),
       };
@@ -148,10 +148,13 @@ export default function FlashcardsView({
     );
   }
 
-  const currentCard = cardOrder[currentIndex] ?? null;
-  const masteredCount = deck?.masteredIds.length ?? 0;
+  const safeIndex =
+    cardOrder.length > 0 ? Math.min(Math.max(0, currentIndex), cardOrder.length - 1) : 0;
+  const currentCard = cardOrder[safeIndex] ?? null;
+  const masteredIds = Array.isArray(deck?.masteredIds) ? deck.masteredIds : [];
+  const masteredCount = masteredIds.length;
   const isCurrentMastered = Boolean(
-    deck && currentCard && deck.masteredIds.includes(currentCard.id)
+    deck && currentCard && masteredIds.includes(currentCard.id)
   );
 
   return (
@@ -270,7 +273,7 @@ export default function FlashcardsView({
           {/* Card Progress Bar */}
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span className="font-mono text-sky-700 font-semibold tabular-nums">
-              Card {currentIndex + 1} of {cardOrder.length}
+              Card {safeIndex + 1} of {cardOrder.length}
             </span>
             <span className="tabular-nums">
               Use Space to flip · Left/Right arrows to navigate
@@ -281,7 +284,7 @@ export default function FlashcardsView({
             <div
               className="h-full rounded-full bg-sky-600 transition-all duration-200"
               style={{
-                width: `${((currentIndex + 1) / cardOrder.length) * 100}%`,
+                width: `${((safeIndex + 1) / cardOrder.length) * 100}%`,
               }}
             />
           </div>
@@ -418,8 +421,8 @@ export default function FlashcardsView({
             <p className="text-xs font-semibold text-slate-500 mb-3">Deck Overview</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {cardOrder.map((card, idx) => {
-                const isSelected = idx === currentIndex;
-                const mastered = deck.masteredIds.includes(card.id);
+                const isSelected = idx === safeIndex;
+                const mastered = masteredIds.includes(card.id);
                 return (
                   <button
                     key={card.id}
