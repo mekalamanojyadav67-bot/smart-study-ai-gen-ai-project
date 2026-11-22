@@ -3,11 +3,25 @@ import type { Flashcard, QuizQuestion, DifficultTopic, KeyTerm } from '../types'
 async function handleJsonResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const message =
-      typeof (data as { error?: string }).error === 'string'
-        ? (data as { error: string }).error
-        : `Request failed with status ${res.status}`;
-    throw new Error(message);
+    if (typeof (data as { error?: string }).error === 'string') {
+      throw new Error((data as { error: string }).error);
+    }
+    if (res.status === 404) {
+      throw new Error(
+        'API endpoint not found (404). Make sure the backend or Vercel /api serverless functions are deployed.'
+      );
+    }
+    if (res.status === 413) {
+      throw new Error(
+        'The uploaded PDF is too large for the serverless request limit. Try a smaller PDF or paste the notes.'
+      );
+    }
+    if (res.status === 504) {
+      throw new Error(
+        'The AI request timed out. Try generating fewer questions or shorter notes.'
+      );
+    }
+    throw new Error(`Request failed with status ${res.status}`);
   }
   return data as T;
 }
